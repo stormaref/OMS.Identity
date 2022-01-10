@@ -6,5 +6,5 @@ public class RefreshToken : BaseEntity
     public Guid UserId { get; set; }
     public string JWTId { get; set; }
     public bool Used { get; set; }
-    public bool InValidation { get; internal set; }
+    public bool InValidation { get; set; }
 }

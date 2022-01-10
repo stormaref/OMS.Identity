@@ -3,9 +3,11 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using OMS.Identity.Common.Settings;
+using OMS.Identity.Common.Tools;
 using OMS.Identity.Infrastructure.Entities;
 using OMS.Identity.Infrastructure.Persistence;
 using JwtRegisteredClaimNames = Microsoft.IdentityModel.JsonWebTokens.JwtRegisteredClaimNames;
@@ -17,12 +19,14 @@ public interface IAuthService
     Task<string> Login(string username, string password);
     Task<AuthenticationReply> VerifyCode(string username, string code);
     Task<AuthenticationReply> RefreshTokenAsync(RefreshTokenRequest refreshToken);
+    Task<CaptchaRequest> RequestCaptcha(Guid? id);
 }
 
 public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole<Guid>> _roleManager;
+    private readonly ICacheService _cacheService;
     private readonly DatabaseContext _context;
     private readonly JWTKeys _jwtKeys;
 
@@ -30,12 +34,42 @@ public class AuthService : IAuthService
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole<Guid>> roleManager,
         DatabaseContext context,
-        IOptionsSnapshot<JWTKeys> options)
+        IOptionsSnapshot<JWTKeys> options,
+        ICacheService cacheService)
     {
         _userManager = userManager;
         _roleManager = roleManager;
         _context = context;
+        _cacheService = cacheService;
         _jwtKeys = options.Value;
+    }
+
+    public async Task<CaptchaRequest> RequestCaptcha(Guid? id)
+    {
+        if (id is null)
+        {
+            id = Guid.NewGuid();
+        }
+        else
+        {
+            var captchaRequest = await _cacheService.GetFromCache<CaptchaRequest>(id.ToString());
+            if (captchaRequest == null)
+            {
+                //todo exception
+            }
+        }
+
+        var (code, captcha) = CaptchaCreator.Create();
+        var request = new CaptchaRequest(id.Value, code, captcha);
+        await _cacheService.SetCache(
+            id.Value.ToString(),
+            request,
+            new DistributedCacheEntryOptions()
+            {
+                AbsoluteExpiration = DateTimeOffset.Now.AddSeconds(30)
+            });
+
+        return request;
     }
 
     public async Task<string> Login(string username, string password)
@@ -43,15 +77,7 @@ public class AuthService : IAuthService
         var user = await _userManager.FindByNameAsync(username);
         if (user is null)
         {
-            var applicationUser = new ApplicationUser()
-            {
-                Id = Guid.NewGuid(),
-                UserName = "aref",
-                TwoFactorEnabled = true,
-            };
-            applicationUser.PasswordHash = _userManager.PasswordHasher.HashPassword(applicationUser, "abcd");
-
-            await _userManager.CreateAsync(applicationUser);
+            await RegisterNewUser(username, password);
             return "";
         }
 
@@ -64,6 +90,23 @@ public class AuthService : IAuthService
         var code = await _userManager.GenerateTwoFactorTokenAsync(user, ConstantStrings.TokenProvider);
         return code;
         //todo send code
+    }
+
+    private async Task RegisterNewUser(string username, string password)
+    {
+        var user = await _userManager.FindByNameAsync(username);
+        if (user is not null)
+        {
+            //todo
+        }
+
+        var applicationUser = new ApplicationUser()
+        {
+            UserName = username,
+            TwoFactorEnabled = true,
+        };
+        applicationUser.PasswordHash = _userManager.PasswordHasher.HashPassword(applicationUser, password);
+        await _userManager.CreateAsync(applicationUser);
     }
 
     public async Task<AuthenticationReply> VerifyCode(string username, string code)

@@ -1,4 +1,5 @@
 using OMS.Identity;
+using OMS.Identity.Common.Tools;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +9,8 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+var (code, captcha) = CaptchaCreator.Create();
 
 builder.Services.AddServices(builder.Configuration);
 

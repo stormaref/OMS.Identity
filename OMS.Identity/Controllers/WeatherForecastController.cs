@@ -33,10 +33,16 @@ public class WeatherForecastController : ControllerBase
             })
             .ToArray();
     }
-    
+
     [HttpPost]
     public async Task<AuthenticationReply> Post(string code)
     {
-        return await _authService.VerifyCode("aref",code);
+        return await _authService.VerifyCode("aref", code);
+    }
+
+    [HttpGet("[action]")]
+    public async Task<CaptchaRequest> RequestCaptcha(Guid? captchaId)
+    {
+        return await _authService.RequestCaptcha(captchaId);
     }
 }

@@ -51,5 +51,12 @@ public static class DependencyInjection
         );
 
         services.AddScoped<IAuthService, AuthService>();
+        
+        services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = configuration.GetSection("Redis")["ConnectionString"];
+        });
+
+        services.AddSingleton<ICacheService, CacheService>();
     }
 }
